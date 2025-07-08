@@ -1,0 +1,74 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PowerPoint Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      /* For custom animations used in Slideshow.tsx */
+      @keyframes fade-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      .animate-fade-in {
+        animation: fade-in 0.5s ease-out forwards;
+      }
+      
+      /* --- New Transition Animations --- */
+      /* Slide In/Out */
+      @keyframes slide-in-from-right {
+        from { transform: translateX(100%); }
+        to { transform: translateX(0); }
+      }
+      .animate-slide-in-from-right { animation: slide-in-from-right 0.5s ease-out forwards; }
+      
+      @keyframes slide-out-to-left {
+        from { transform: translateX(0); }
+        to { transform: translateX(-100%); }
+      }
+      .animate-slide-out-to-left { animation: slide-out-to-left 0.5s ease-out forwards; }
+      
+      @keyframes slide-in-from-left {
+        from { transform: translateX(-100%); }
+        to { transform: translateX(0); }
+      }
+      .animate-slide-in-from-left { animation: slide-in-from-left 0.5s ease-out forwards; }
+
+      @keyframes slide-out-to-right {
+        from { transform: translateX(0); }
+        to { transform: translateX(100%); }
+      }
+      .animate-slide-out-to-right { animation: slide-out-to-right 0.5s ease-out forwards; }
+
+      /* Push Left/Right */
+      .push-transition-container {
+        display: flex;
+        width: 200%; /* Container width is double to hold two slides */
+        transition: transform 0.5s ease-out;
+      }
+      .push-slide {
+        width: 50%; /* Each slide takes half the container width */
+        flex-shrink: 0;
+      }
+
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.1.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.1.0/",
+    "react/": "https://esm.sh/react@^19.1.0/",
+    "jspdf": "https://esm.sh/jspdf@2.5.1",
+    "html2canvas": "https://esm.sh/html2canvas@1.4.1"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

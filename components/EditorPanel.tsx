@@ -1,6 +1,6 @@
 
 import * as React from 'react';
-import { SlideLayout, ResourceType } from '../types';
+import { SlideLayout, ResourceType, ActionType } from '../types';
 import { ImageIcon, MusicIcon, PlayIcon } from './Icons';
 import { ThemeContext } from './PowerPointSimulator';
 import Shape from './Shape';
@@ -24,7 +24,7 @@ const EditableText = ({ content, onUpdate, className, placeholder, theme }) => {
   );
 };
 
-const EditorPanel = ({ slide, onUpdateSlide, onUpdateShapePosition }) => {
+const EditorPanel = ({ slide, onUpdateSlide, onUpdateShapePosition, logAction }) => {
   const theme = React.useContext(ThemeContext);
   
   // Stare locală pentru a gestiona tragerea formelor
@@ -51,6 +51,8 @@ const EditorPanel = ({ slide, onUpdateSlide, onUpdateShapePosition }) => {
           return;
       }
       // --- Sfârșit Validare ---
+      
+      logAction({ type: ActionType.DROP_RESOURCE, payload: { resourceType: resource.type, targetArea } });
 
       const updatedSlide = { ...slide, content: { ...slide.content } };
 
@@ -86,6 +88,7 @@ const EditorPanel = ({ slide, onUpdateSlide, onUpdateShapePosition }) => {
   };
 
   const updateText = (key, html) => {
+    logAction({ type: ActionType.UPDATE_TEXT, payload: { slideId: slide.id, field: key } });
     const updatedSlide = {
       ...slide,
       content: { ...slide.content, [key]: { html } }

@@ -1,13 +1,13 @@
 
 import * as React from 'react';
 import { SlideshowIcon, NewSlideIcon, LayoutIcon, BoldIcon, ItalicIcon, UnderlineIcon, LinkIcon, TextColorIcon, AlignCenterIcon, AlignLeftIcon, AlignRightIcon, ImageIcon, RectangleIcon, CircleIcon, UndoIcon, RedoIcon, ExportPdfIcon } from './Icons';
-import { SlideLayout } from '../types';
+import { SlideLayout, ActionType } from '../types';
 
 const Ribbon = (props) => {
   const { 
     onStartSlideshow, onAddSlide, onChangeLayout, onApplyImageFilter, 
     onAddShape, onSetTheme, onSetBackground, themes, onSetTransition,
-    onUndo, onRedo, canUndo, canRedo, onExportPdf
+    onUndo, onRedo, canUndo, canRedo, onExportPdf, logAction
   } = props;
   
   const [activeTab, setActiveTab] = React.useState('Acasă');
@@ -45,7 +45,12 @@ const Ribbon = (props) => {
   };
 
   const renderActiveTabContent = () => {
-    const command = (cmd, val = null) => () => document.execCommand(cmd, false, val);
+    const command = (cmd, val = null) => () => {
+        document.execCommand(cmd, false, val);
+        if (['bold', 'italic', 'underline'].includes(cmd)) {
+            logAction({ type: ActionType.FORMAT_TEXT, payload: cmd });
+        }
+    };
     const commandWithVal = (cmd) => (e) => document.execCommand(cmd, false, e.target.value);
     
     const handleLink = () => {

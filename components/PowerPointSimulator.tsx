@@ -1,8 +1,9 @@
 
 import * as React from 'react';
+import ReactDOM from 'react-dom';
+import * as ReactDOMClient from 'react-dom/client';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import ReactDOM from 'react-dom/client';
 
 import Ribbon from './Ribbon';
 import SlidePanel from './SlidePanel';
@@ -10,8 +11,12 @@ import EditorPanel from './EditorPanel';
 import ResourcePanel from './ResourcePanel';
 import Slideshow from './Slideshow';
 import NotesPanel from './NotesPanel';
+import EvaluationModal from './EvaluationModal';
 import { MinimizeIcon, MaximizeIcon, CloseIcon } from './Icons';
-import { ResourceType, SlideLayout } from '../types';
+import { ResourceType, SlideLayout, ActionType } from '../types';
+import { calculateScore } from '../utils/evaluation';
+import { sendEvaluationResult } from '../utils/communication';
+
 
 // --- THEMES & CONTEXT ---
 const THEMES = {
@@ -97,6 +102,39 @@ const getInitialState = () => {
 };
 // --- END UNDO/REDO ---
 
+
+// --- UI SUB-COMPONENTS (for portals) ---
+const TaskbarItems = ({ score, onShowHint, onShowEvaluation }) => {
+    return React.createElement(
+        React.Fragment,
+        null,
+        React.createElement('div', { className: 'flex items-center space-x-2 bg-white/50 px-3 py-1 rounded-md' },
+            React.createElement('span', { className: 'text-sm font-bold text-green-700' }, 'Scor:'),
+            React.createElement('span', { className: 'text-sm font-bold text-gray-800' }, score)
+        ),
+        React.createElement('button', { onClick: onShowHint, className: 'px-4 py-1.5 text-sm font-semibold text-white bg-blue-500 rounded-md hover:bg-blue-600 transition-colors' }, 'Ajutor'),
+        React.createElement('button', { onClick: onShowEvaluation, className: 'px-4 py-1.5 text-sm font-semibold text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors' }, 'Verifică-mă!')
+    );
+};
+
+const HintNotification = ({ message, onClose }) => {
+    React.useEffect(() => {
+        const timer = setTimeout(onClose, 15000);
+        return () => clearTimeout(timer);
+    }, [onClose]);
+
+    if (!message) return null;
+
+    return React.createElement(
+        'div', { className: 'fixed bottom-16 right-5 bg-gray-800 text-white p-4 rounded-lg shadow-2xl z-50 animate-fade-in' },
+        React.createElement('p', { className: 'font-bold' }, 'Indiciu:'),
+        React.createElement('p', null, message),
+        React.createElement('button', { onClick: onClose, className: 'absolute top-1 right-2 text-gray-400 hover:text-white' }, '×')
+    );
+};
+// --- END UI SUB-COMPONENTS ---
+
+
 const PowerPointSimulator = () => {
   // Starea aplicației acum include istoricul pentru undo/redo.
   const [state, setState] = React.useState(getInitialState);
@@ -104,11 +142,30 @@ const PowerPointSimulator = () => {
 
   const [isSlideshowVisible, setSlideshowVisible] = React.useState(false);
   const [activeTheme, setActiveTheme] = React.useState(THEMES['Luminos']);
+
+  // --- EVALUATION & LOGGING STATE ---
+  const [actions, setActions] = React.useState([]);
+  const [currentScore, setCurrentScore] = React.useState(0);
+  const [hint, setHint] = React.useState(null);
+  const [wasHintShown, setWasHintShown] = React.useState(false);
+  const [isEvaluationModalOpen, setEvaluationModalOpen] = React.useState(false);
+  const [evaluationResult, setEvaluationResult] = React.useState(null);
+
+  const portalRoot = document.getElementById('portal-root');
+  const taskbarContainer = document.getElementById('taskbar-items-container');
+
+  const logAction = React.useCallback((action) => {
+    setActions(prev => [...prev, { ...action, timestamp: Date.now() }]);
+  }, []);
   
   // --- STATE UPDATE LOGIC ---
   // O funcție centralizată pentru a actualiza starea și a gestiona istoricul.
   // Orice modificare a slide-urilor trebuie să treacă prin această funcție.
-  const updateState = React.useCallback((newState, actionType = 'update') => {
+  const updateState = React.useCallback((newState, action?) => {
+      // Log action before updating state
+      if (action) {
+          logAction(action);
+      }
       setState(prevState => {
           // La o acțiune nouă, istoricul 'future' este resetat.
           const newPresent = typeof newState === 'function' ? newState(prevState.present) : newState;
@@ -118,7 +175,7 @@ const PowerPointSimulator = () => {
               future: [],
           };
       });
-  }, []);
+  }, [logAction]);
 
   const handleSelectSlide = (index) => {
     // Selectarea unui slide nu trebuie să fie o acțiune care poate fi anulată,
@@ -147,7 +204,7 @@ const PowerPointSimulator = () => {
         const newSlides = [...prev.slides];
         newSlides.splice(newIndex, 0, newSlide);
         return { slides: newSlides, currentSlideIndex: newIndex };
-    });
+    }, { type: ActionType.ADD_SLIDE });
   }, [currentSlideIndex, updateState]);
 
   const handleDeleteSlide = React.useCallback((indexToDelete) => {
@@ -157,7 +214,7 @@ const PowerPointSimulator = () => {
             const newSlides = prev.slides.filter((_, index) => index !== indexToDelete);
             const newCurrentIndex = prev.currentSlideIndex >= indexToDelete ? Math.max(0, prev.currentSlideIndex - 1) : prev.currentSlideIndex;
             return { slides: newSlides, currentSlideIndex: newCurrentIndex };
-        });
+        }, { type: ActionType.DELETE_SLIDE, payload: { index: indexToDelete } });
     }
   }, [slides.length, updateState]);
 
@@ -170,14 +227,13 @@ const PowerPointSimulator = () => {
         const newSlides = [...prev.slides];
         newSlides.splice(newIndex, 0, newSlide);
         return { slides: newSlides, currentSlideIndex: newIndex };
-    });
+    }, { type: ActionType.ADD_SLIDE, payload: { duplicated: true } });
   }, [slides, updateState]);
   
   const handleChangeLayout = React.useCallback((newLayout) => {
     const currentSlide = slides[currentSlideIndex];
     const updatedSlide = { ...currentSlide, layout: newLayout };
 
-    // Asigură că noile câmpuri de conținut există la schimbarea layout-ului
     const requiredContent = {
         [SlideLayout.TITLE]: { title: { html: '' }, subtitle: { html: '' } },
         [SlideLayout.IMAGE_WITH_CAPTION]: { image: { src: '', alt: '', filter: 'none' }, caption: { html: '' } },
@@ -185,9 +241,9 @@ const PowerPointSimulator = () => {
     };
     
     updatedSlide.content = { ...requiredContent[newLayout], ...currentSlide.content };
-
+    logAction({ type: ActionType.CHANGE_LAYOUT, payload: newLayout });
     handleUpdateSlide(updatedSlide);
-  }, [slides, currentSlideIndex, handleUpdateSlide]);
+  }, [slides, currentSlideIndex, handleUpdateSlide, logAction]);
 
   const handleReorderSlides = React.useCallback((sourceIndex, destinationIndex) => {
     if (sourceIndex === destinationIndex) return;
@@ -215,9 +271,13 @@ const PowerPointSimulator = () => {
     }
   }, [slides, currentSlideIndex, handleUpdateSlide]);
 
-  const handleSetTheme = (themeName) => setActiveTheme(THEMES[themeName]);
+  const handleSetTheme = (themeName) => {
+      logAction({ type: ActionType.APPLY_THEME, payload: themeName });
+      setActiveTheme(THEMES[themeName]);
+  };
   
   const handleSetBackground = (background, applyToAll) => {
+      logAction({ type: ActionType.SET_BACKGROUND, payload: { applyToAll } });
       if (applyToAll) {
           updateState(prev => ({...prev, slides: prev.slides.map(slide => ({ ...slide, background }))}));
       } else {
@@ -233,7 +293,7 @@ const PowerPointSimulator = () => {
           color: '#3B82F6' // blue-500
       };
       const updatedSlide = { ...slides[currentSlideIndex], shapes: [...slides[currentSlideIndex].shapes, newShape] };
-      handleUpdateSlide(updatedSlide);
+      updateState(prev => ({...prev, slides: prev.slides.map(s => s.id === updatedSlide.id ? updatedSlide : s)}), {type: ActionType.ADD_SHAPE, payload: type});
   };
   
   const handleUpdateShapePosition = (shapeId, x, y) => {
@@ -255,6 +315,7 @@ const PowerPointSimulator = () => {
   };
   
   const handleStartSlideshow = async () => {
+    logAction({ type: ActionType.START_SLIDESHOW });
     try {
       if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen();
       setSlideshowVisible(true);
@@ -292,6 +353,40 @@ const PowerPointSimulator = () => {
       return { past: newPast, present: newPresent, future: newFuture };
     });
   }, [canRedo]);
+
+  // --- EVALUATION, HINTS, and SIDE EFFECTS ---
+  React.useEffect(() => {
+    // Update score in real time
+    const result = calculateScore(slides, actions);
+    setCurrentScore(result.score);
+
+    // Hint logic
+    const hasAddedImage = slides.some(s => s.content.image?.src);
+    if (!wasHintShown && actions.length > 5 && !hasAddedImage) {
+        setHint("Poți adăuga o imagine pe un slide trăgând resursa 'poza.jpg' din panoul din dreapta.");
+        setWasHintShown(true);
+    }
+  }, [slides, actions, wasHintShown]);
+  
+  const handleShowEvaluation = () => {
+      const result = calculateScore(slides, actions);
+      setEvaluationResult(result);
+      setEvaluationModalOpen(true);
+      
+      const detailsText = result.feedback.map(f => `${f.status === 'correct' ? '[CORECT]' : '[INCORECT]'} ${f.text}`).join('\n');
+      sendEvaluationResult(
+          result.score,
+          result.maxScore,
+          detailsText,
+          result.tasksCompleted,
+          result.totalTasks
+      );
+  };
+
+  const handleShowHint = () => {
+      alert("Indiciu: Asigură-te că ai adăugat conținut pe toate slide-urile și ai folosit resursele din panoul din dreapta pentru a obține un scor mai mare.");
+  };
+
   
   // --- LOCALSTORAGE & KEYBOARD SHORTCUTS ---
   React.useEffect(() => {
@@ -336,23 +431,33 @@ const PowerPointSimulator = () => {
     const pdf = new jsPDF({ orientation: 'landscape', unit: 'px', format: [800, 450] });
     const container = pdfRenderContainerRef.current;
     
+    // Create a temporary root to render slides for PDF generation
+    const tempRoot = ReactDOMClient.createRoot(container);
+
     for (let i = 0; i < slides.length; i++) {
         const slide = slides[i];
         
-        // Randare temporară a slide-ului în containerul ascuns
-        const slideElement = React.createElement(EditorPanel, { slide, onUpdateSlide: () => {}, onUpdateShapePosition: () => {} });
-        const root = ReactDOM.createRoot(container);
-        await new Promise(resolve => root.render(slideElement, resolve));
+        // Render the slide into the hidden container
+        const slideElement = React.createElement(EditorPanel, { 
+            slide, 
+            onUpdateSlide: () => {}, 
+            onUpdateShapePosition: () => {},
+            logAction: () => {} // Pass dummy function
+        });
+        
+        await new Promise(resolve => tempRoot.render(
+            React.createElement(ThemeContext.Provider, { value: activeTheme }, slideElement), 
+            () => resolve(null)
+        ));
         
         const canvas = await html2canvas(container.querySelector('.aspect-video'), { scale: 2 });
         const imgData = canvas.toDataURL('image/png');
         
-        if (i > 0) pdf.addPage();
+        if (i > 0) pdf.addPage([800, 450], 'landscape');
         pdf.addImage(imgData, 'PNG', 0, 0, 800, 450);
-        
-        root.unmount(); // Curățare după fiecare slide
     }
     
+    tempRoot.unmount(); // Unmount the temporary root
     pdf.save('prezentare.pdf');
     setIsExporting(false);
   };
@@ -362,7 +467,13 @@ const PowerPointSimulator = () => {
   return React.createElement(ThemeContext.Provider, { value: activeTheme },
     React.createElement('div', { className: 'relative' },
       // Container ascuns pentru randarea PDF
-      React.createElement('div', { ref: pdfRenderContainerRef, className: 'absolute -top-[9999px] -left-[9999px] opacity-0' }),
+      React.createElement('div', { ref: pdfRenderContainerRef, className: 'absolute -top-[9999px] -left-[9999px] opacity-0 w-[800px] h-[450px]' }),
+      
+      // Portals for global UI elements
+      portalRoot && isEvaluationModalOpen && ReactDOM.createPortal(React.createElement(EvaluationModal, { result: evaluationResult }), portalRoot),
+      portalRoot && hint && ReactDOM.createPortal(React.createElement(HintNotification, { message: hint, onClose: () => setHint(null) }), portalRoot),
+      taskbarContainer && ReactDOM.createPortal(React.createElement(TaskbarItems, { score: currentScore, onShowHint: handleShowHint, onShowEvaluation: handleShowEvaluation }), taskbarContainer),
+
       React.createElement(
         'div', { className: "w-[95vw] h-[95vh] bg-gray-200 shadow-2xl rounded-lg flex flex-col overflow-hidden border border-gray-400" },
         isSlideshowVisible && React.createElement(Slideshow, { slides, startIndex: currentSlideIndex, onClose: handleCloseSlideshow }),
@@ -381,7 +492,7 @@ const PowerPointSimulator = () => {
         React.createElement(Ribbon, {
           onStartSlideshow: handleStartSlideshow, onAddSlide: handleAddSlide, onChangeLayout: handleChangeLayout, onApplyImageFilter: handleApplyImageFilter,
           onAddShape: handleAddShape, onSetTheme: handleSetTheme, onSetBackground: handleSetBackground, onSetTransition: handleSetTransition, themes: THEMES,
-          onUndo: handleUndo, onRedo: handleRedo, canUndo: canUndo, canRedo: canRedo, onExportPdf: handleExportPdf
+          onUndo: handleUndo, onRedo: handleRedo, canUndo: canUndo, canRedo: canRedo, onExportPdf: handleExportPdf, logAction: logAction
         }),
         React.createElement(
           'div', { className: "flex-grow flex flex-col overflow-hidden" },
@@ -391,7 +502,7 @@ const PowerPointSimulator = () => {
               onDeleteSlide: handleDeleteSlide, onDuplicateSlide: handleDuplicateSlide, onReorderSlides: handleReorderSlides, onAddSlide: handleAddSlide
             }),
             React.createElement(EditorPanel, {
-              slide: currentSlide, onUpdateSlide: handleUpdateSlide, onUpdateShapePosition: handleUpdateShapePosition
+              slide: currentSlide, onUpdateSlide: handleUpdateSlide, onUpdateShapePosition: handleUpdateShapePosition, logAction: logAction
             }),
             React.createElement(ResourcePanel, { resources: RESOURCES })
           ),

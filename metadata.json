@@ -1,5 +1,6 @@
 {
-  "name": "AI-Powered PowerPoint Simulator",
+  "name": "Simulator Windows 11 - exercitiul 11",
   "description": "A web-based simulator of a presentation application that allows users to create, edit, and present slides. Users can drag and drop resources like text, images, and audio onto slides. It also includes features like an accessibility checker and a slideshow mode.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "prompt": ""
 }

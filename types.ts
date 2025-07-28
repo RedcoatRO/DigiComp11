@@ -12,13 +12,45 @@ export const SlideLayout = {
   MEDIA_WITH_TEXT: 'media_with_text',
 };
 
-// Interfaces have been removed as they are TypeScript-specific syntax
-// and cause errors when the code is run directly in a browser without a build step.
+// New types for Evaluation System
+export const ActionType = {
+    ADD_SLIDE: 'ADD_SLIDE',
+    CHANGE_LAYOUT: 'CHANGE_LAYOUT',
+    APPLY_THEME: 'APPLY_THEME',
+    SET_BACKGROUND: 'SET_BACKGROUND',
+    ADD_SHAPE: 'ADD_SHAPE',
+    START_SLIDESHOW: 'START_SLIDESHOW',
+    FORMAT_TEXT: 'FORMAT_TEXT',
+    DROP_RESOURCE: 'DROP_RESOURCE',
+    UPDATE_TEXT: 'UPDATE_TEXT',
+    DELETE_SLIDE: 'DELETE_SLIDE',
+};
+
 
 // The type definitions below are for documentation and clarity.
 // They are not used for type checking in the browser environment.
 
 /*
+export interface ActionLogEntry {
+  type: string; // one of ActionType
+  payload?: any;
+  timestamp: number;
+}
+
+export interface EvaluationFeedback {
+    text: string;
+    status: 'correct' | 'incorrect';
+}
+
+export interface EvaluationResult {
+    score: number;
+    maxScore: number;
+    summary: string;
+    feedback: EvaluationFeedback[];
+    tasksCompleted: number;
+    totalTasks: number;
+}
+
 export interface ShapeObject {
   id: string;
   type: 'rectangle' | 'circle';

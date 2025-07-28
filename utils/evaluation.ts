@@ -58,7 +58,8 @@ const OBJECTIVES = [
     {
         id: 'add_shape',
         description: 'Ai adăugat o formă geometrică.',
-        points: 5,
+        // Points adjusted from 5 to 10 to make the total max score 100.
+        points: 10,
         checker: (slides, actions) => slides.some(s => s.shapes.length > 0)
     },
     {

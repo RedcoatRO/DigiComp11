@@ -445,10 +445,15 @@ const PowerPointSimulator = () => {
             logAction: () => {} // Pass dummy function
         });
         
-        await new Promise(resolve => tempRoot.render(
-            React.createElement(ThemeContext.Provider, { value: activeTheme }, slideElement), 
-            () => resolve(null)
-        ));
+        await new Promise(resolve => {
+            tempRoot.render(
+                React.createElement(ThemeContext.Provider, { value: activeTheme }, slideElement)
+            );
+            // With React 18's createRoot, the render callback is removed.
+            // We use a short timeout to allow React to flush the update to the DOM
+            // before we capture it with html2canvas.
+            setTimeout(resolve, 100);
+        });
         
         const canvas = await html2canvas(container.querySelector('.aspect-video'), { scale: 2 });
         const imgData = canvas.toDataURL('image/png');
